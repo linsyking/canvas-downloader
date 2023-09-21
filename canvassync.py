@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.7
+#!/usr/bin/env python
 """
 CANVAS FILE SYNC v1.1
     Syncs all Canvas files from specified courses to a local folder,
@@ -47,6 +47,9 @@ def add_before_ext(file_name, end) -> str:
 
 
 def download(file, dest, request_headers):
+    if(file['url'] == ''):
+        print(f"Warning: {file['display_name']} ignored due to canvas error")
+        return
     if file['url'].startswith('URL:'):
         with open(dest, 'w') as fd:
             fd.write(f"[InternetShortcut]\nURL={file['url'][4:]}\n")
@@ -107,7 +110,7 @@ class Course:
         else:
             self.type = Course.Type.FILES
         self.access_token = config["tokens"][cconfig["access_token"]]
-        self.rclone = cconfig["rclone"]
+        # self.rclone = cconfig["rclone"]
         self.headers = {'Authorization': 'Bearer ' + self.access_token}
         r_course = s.get(base_url + 'courses/' + self.course_id, headers=self.headers)
         r_course.raise_for_status()
@@ -148,17 +151,21 @@ class Course:
             for filename in filenames:
                 if os.path.join(root, filename) not in self.file_set:
                     if args.verbosity >= 1:
-                        print(" ", filename, "file no longer in Canvas, moving to .old")
-                    os.makedirs(os.path.join(root, ".old"), exist_ok=True)
-                    shutil.move(os.path.join(root, filename), os.path.join(root, ".old", filename))
+                        print(" ", filename, "file no longer in Canvas, deleting")
+                    # os.makedirs(os.path.join(root, ".old"), exist_ok=True)
+                    # shutil.move(os.path.join(root, filename), os.path.join(root, ".old", filename))
+                    os.remove(os.path.join(root, filename))
             for dirname in dirnames:
                 if dirname == ".old":
                     continue
                 if os.path.join(root, dirname) not in self.folder_dict.values():
                     if args.verbosity >= 1:
-                        print(" ", dirname, "folder no longer in Canvas, moving to .old")
-                    os.makedirs(os.path.join(root, ".old"), exist_ok=True)
-                    recursive_old_dir_move(os.path.join(root, dirname), os.path.join(root, ".old", dirname))
+                        print(" ", dirname, "folder no longer in Canvas, deleteing")
+                    # os.makedirs(os.path.join(root, ".old"), exist_ok=True)
+                    # os.removedirs(os.path.join(root, dirname))
+                    shutil.rmtree(os.path.join(root, dirname))
+
+                    # recursive_old_dir_move(os.path.join(root, dirname), os.path.join(root, ".old", dirname))
 
     def sync_cloud(self):
         for dest in self.rclone:
@@ -251,11 +258,12 @@ class Course:
                 if args.verbosity >= 1:
                     print('  Found newer version of', file['display_name'], 'updated at', file['updated_at'])
                 self.updated += 1
-                new_file_name = add_before_ext(file_name,
-                                               ' v' + datetime.datetime.fromtimestamp(os.path.getmtime(file_path))
-                                               .astimezone(local_timezone).strftime(time_fmt))
-                os.makedirs(os.path.join(file_location, ".old"), exist_ok=True)
-                shutil.move(file_path, os.path.join(file_location, ".old", new_file_name))
+                # new_file_name = add_before_ext(file_name,
+                #                                ' v' + datetime.datetime.fromtimestamp(os.path.getmtime(file_path))
+                #                                .astimezone(local_timezone).strftime(time_fmt))
+                # os.makedirs(os.path.join(file_location, ".old"), exist_ok=True)
+                # shutil.move(file_path, os.path.join(file_location, ".old", new_file_name))
+                os.remove(file_path)
                 shutil.copy2(temp_file_path, file_path)
             else:
                 self.skipped += 1
@@ -280,7 +288,7 @@ class Course:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Syncs all Canvas files from specified courses to a local folder,\
                                                   then uploads them to cloud storage using rclone.")
-    parser.add_argument("-v", "--verbosity", help="increase output verbosity", action="count", default=0)
+    parser.add_argument("-v", "--verbosity", help="increase output verbosity", action="count", default=1)
     parser.add_argument("-n", "--dryrun", help="have rclone do a trial run with no permanent changes",
                         action="store_true")
     args = parser.parse_args()
@@ -296,7 +304,7 @@ if __name__ == '__main__':
             course = Course(c)
             course.sync_local()
             course.onto_local()
-            course.sync_cloud()
+            # course.sync_cloud()
             statsbycourse.append(f"  {course.course_dict['name']}: "
                                  f"{course.downloaded} new, "
                                  f"{course.updated} updated, "
